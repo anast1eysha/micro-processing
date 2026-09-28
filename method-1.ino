@@ -2,11 +2,13 @@ enum State { S_GREEN, S_YELLOW, S_RED, S_WARNING };
 
 State st = S_GREEN;
 unsigned long tStart = 0, dur = 0;
-bool pedReq = false, emerg = false, night = false;
+bool pedReq = false, night = false;
 bool blinkOn = false;
+bool btnStable = false, btnRaw = false;
+bool nightStable = false, nightRaw = false;
 unsigned long lastBlink = 0;
-bool btnPrev = false;
-unsigned long btnTime = 0;
+unsigned long btnRawChange = 0;
+unsigned long nightRawChange = 0;
 
 void setOut(State s) {
   digitalWrite(13, s == S_RED);
@@ -31,24 +33,38 @@ void goTo(State s, unsigned long d) {
 }
 
 void readInputs() {
-  bool b = !digitalRead(2);
+  bool raw = !digitalRead(2);
 
-  if (b && !btnPrev) {
-    btnTime = millis();
-    btnPrev = true;
+  if (raw != btnRaw) {
+    btnRaw = raw;
+    btnRawChange = millis();
   }
 
-  if (!b && btnPrev) {
-    btnPrev = false;
+  if (millis() - btnRawChange > 50 && btnRaw != btnStable) {
+    btnStable = btnRaw;
 
-    if (millis() - btnTime > 1500) {
-      night = !night;
-    } else {
+    if (btnStable) {
       pedReq = true;
+      Serial.println("PED REQ");
     }
   }
 
-  emerg = !digitalRead(A0);
+  bool rawN = !digitalRead(3);
+
+  if (rawN != nightRaw) {
+    nightRaw = rawN;
+    nightRawChange = millis();
+  }
+
+  if (millis() - nightRawChange > 50 && nightRaw != nightStable) {
+    nightStable = nightRaw;
+
+    if (nightStable) {
+      night = !night;
+      Serial.print("NIGHT = ");
+      Serial.println(night);
+    }
+  }
 }
 
 void setup() {
@@ -58,7 +74,7 @@ void setup() {
   pinMode(12, OUTPUT);
   pinMode(11, OUTPUT);
   pinMode(2, INPUT_PULLUP);
-  pinMode(A0, INPUT_PULLUP);
+  pinMode(3, INPUT_PULLUP);
 
   goTo(S_GREEN, 10000);
 }
@@ -66,16 +82,12 @@ void setup() {
 void loop() {
   readInputs();
 
-  if (emerg && st != S_WARNING) {
-    goTo(S_WARNING, 500);
-  }
-
-  if (!emerg && !night && st == S_WARNING) {
-    goTo(S_GREEN, 10000);
-  }
-
   if (night && st != S_WARNING) {
     goTo(S_WARNING, 500);
+  }
+
+  if (!night && st == S_WARNING) {
+    goTo(S_GREEN, 10000);
   }
 
   unsigned long e = millis() - tStart;
